@@ -8,6 +8,10 @@ import { Eye, EyeOff, Mail, Lock, User, ChevronRight, ChevronLeft, Check } from 
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { createEvent } from '@/lib/api/events'
+import { ApiError } from '@/lib/api/client'
+import type { EventType } from '@/lib/types'
 
 const EVENT_TYPES = [
   { value: 'mariage', emoji: '💍', label: 'Mariage', desc: 'Cérémonie de mariage' },
@@ -20,13 +24,14 @@ const STEPS = ['Votre compte', 'Votre événement', 'Finalisation']
 
 export default function RegisterPage() {
   const router = useRouter()
+  const { register } = useAuth()
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(false)
   const [completed, setCompleted] = useState(false)
 
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: '', password: '', confirmPassword: '',
-    eventType: '', eventName: '', eventDate: '', guestCount: 50, heardFrom: '',
+    eventType: '', eventName: '', eventDate: '', venue: '', guestCount: 50, heardFrom: '',
   })
   const [showPass, setShowPass] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -43,6 +48,7 @@ export default function RegisterPage() {
       if (!form.eventType) e.eventType = 'Choisissez un type d\'événement'
       if (!form.eventName) e.eventName = 'Nom de l\'événement requis'
       if (!form.eventDate) e.eventDate = 'Date requise'
+      if (!form.venue) e.venue = 'Lieu requis'
     }
     setErrors(e)
     return Object.keys(e).length === 0
@@ -54,10 +60,26 @@ export default function RegisterPage() {
   const handleSubmit = async () => {
     if (!validate()) return
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1500))
-    setLoading(false)
-    setCompleted(true)
-    setTimeout(() => { toast.success('Événement créé !'); router.push('/dashboard') }, 2500)
+    try {
+      await register(`${form.firstName} ${form.lastName}`.trim(), form.email, form.password)
+      try {
+        await createEvent({
+          name: form.eventName,
+          type: form.eventType as EventType,
+          date: form.eventDate,
+          venue: form.venue,
+          steps: [],
+        })
+      } catch {
+        toast('Compte créé. Configurez votre événement dans Paramètres.', { icon: '⚠️' })
+      }
+      setCompleted(true)
+      setTimeout(() => { toast.success('Compte créé !'); router.push('/dashboard') }, 2500)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (completed) {
@@ -155,6 +177,8 @@ export default function RegisterPage() {
                 onChange={e => setForm(f => ({ ...f, eventName: e.target.value }))} error={errors.eventName} />
               <Input label="Date de l'événement" type="date" value={form.eventDate}
                 onChange={e => setForm(f => ({ ...f, eventDate: e.target.value }))} error={errors.eventDate} />
+              <Input label="Lieu" placeholder="Château de Vaux-le-Vicomte" value={form.venue}
+                onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} error={errors.venue} />
             </div>
           )}
 

@@ -161,3 +161,32 @@ export interface Notification {
   read: boolean
   createdAt: string
 }
+
+export interface EventSettings {
+  notifEmail: boolean
+  notifSMS: boolean
+  notifRSVP: boolean
+  notifPhoto: boolean
+  notifGift: boolean
+  photoApproval: boolean
+  publicAlbum: boolean
+  showGuestList: boolean
+  language: string
+  theme: string
+  guestLimit?: number
+}
+
+export interface PublicSeatingTable {
+  id: string
+  name: string
+  capacity: number
+  shape?: 'round' | 'rectangular'
+  guests: { id: string; firstName: string; lastName: string }[]
+}
+
+export interface User {
+  id: string
+  name: string
+  email: string
+  phone?: string
+}

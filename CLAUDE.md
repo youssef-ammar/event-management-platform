@@ -46,11 +46,13 @@ No test runner is configured.
 - **[components/ui/](components/ui/)** — design system primitives: `Button`, `Input`, `Card`, `Modal`, `Badge`, `Avatar`, `Tabs`, `Toggle`, `Dropdown`, `ProgressBar`, `EmptyState`, `Skeleton`
 - **[components/layout/](components/layout/)** — `Navbar` (landing), `Sidebar` (dashboard, collapsible), `DashboardTopbar`, `MobileNav`, `Footer`
 - **[components/landing/](components/landing/)** — landing page sections
-- **[components/dashboard/](components/dashboard/)**, **[components/gifts/](components/gifts/)**, **[components/seating/](components/seating/)**, etc. — feature-specific components
+- `components/dashboard/`, `components/gifts/`, `components/seating/`, `components/messaging/`, `components/photos/`, `components/invitation/` — empty scaffolding directories (not yet used). Feature UI (guest table, seating canvas, gift cards, etc.) lives inline inside each route's `page.tsx`, which typically run 150–290 lines.
 
 ### Utilities
 
 - **[lib/utils/cn.ts](lib/utils/cn.ts)** — `clsx` + `tailwind-merge` for conditional class names; use this everywhere instead of string concatenation.
+- **[lib/utils/formatDate.ts](lib/utils/formatDate.ts)** — `formatDate`, `formatDateShort`, `formatTime`, `formatRelative` (fr-FR locale)
+- **[lib/utils/formatCurrency.ts](lib/utils/formatCurrency.ts)** — `formatCurrency`, `formatPercent` (fr-FR locale)
 - **[lib/hooks/useLocalStorage.ts](lib/hooks/useLocalStorage.ts)** — persistent client state
 - **[lib/hooks/useGuests.ts](lib/hooks/useGuests.ts)** — guest filtering logic
 
@@ -71,9 +73,10 @@ Defined in [lib/types/index.ts](lib/types/index.ts):
 ### External image sources
 
 [next.config.js](next.config.js) allows images from Unsplash, UI Avatars, and RandomUser — used by mock data only.
-Priority: Visual quality > ordinary SaaS design.
 
-When redesigning landing pages:
+### Design guidance for landing/marketing pages
+
+Priority: visual quality > ordinary SaaS design. When redesigning landing pages:
 - Aim for Awwwards-quality experiences.
 - Prefer cinematic layouts.
 - Use layered depth.

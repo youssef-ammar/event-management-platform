@@ -1,12 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DashboardTopbar } from '@/components/layout/DashboardTopbar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Dropdown'
-import { INVITATION_STYLES } from '@/lib/mockData'
+import { listInvitationStyles } from '@/lib/api/invitationStyles'
+import { createMessage } from '@/lib/api/messages'
+import { useEvent } from '@/lib/hooks/useEvent'
+import { ApiError } from '@/lib/api/client'
+import { formatDate } from '@/lib/utils/formatDate'
+import type { InvitationStyle } from '@/lib/types'
 import { Send, ZoomIn, ZoomOut, Eye, Save, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
@@ -20,7 +25,9 @@ const FONT_OPTIONS = [
 const COLOR_SWATCHES = ['#C9748F', '#D4AF7A', '#7C3AED', '#2563EB', '#059669', '#DC2626', '#1A1A2E', '#6B7280']
 
 export default function InvitationsPage() {
-  const [selectedStyle, setSelectedStyle] = useState(INVITATION_STYLES[0])
+  const { event, eventId } = useEvent()
+  const [styles, setStyles] = useState<InvitationStyle[]>([])
+  const [selectedStyle, setSelectedStyle] = useState<InvitationStyle>()
   const [selectedColor, setSelectedColor] = useState('#C9748F')
   const [selectedFont, setSelectedFont] = useState('playfair')
   const [guestView, setGuestView] = useState(false)
@@ -38,12 +45,38 @@ export default function InvitationsPage() {
     message: 'C\'est avec une immense joie que nous vous invitons à partager ce moment unique.',
   })
 
+  useEffect(() => {
+    listInvitationStyles().then(list => {
+      setStyles(list)
+      if (list.length > 0) {
+        setSelectedStyle(list[0])
+        setSelectedColor(list[0].primaryColor)
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!event) return
+    setForm(f => ({
+      ...f,
+      coupleNames: event.coupleNames ?? event.name,
+      date: formatDate(event.date),
+      venue: event.venue,
+    }))
+  }, [event])
+
   const handleSend = async () => {
+    if (!eventId) return
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1500))
-    toast.success('Invitations envoyées avec succès !')
-    setLoading(false)
-    setSendModal(false)
+    try {
+      await createMessage(eventId, { type: 'message', content: form.message })
+      toast.success('Invitations envoyées avec succès !')
+      setSendModal(false)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -57,12 +90,12 @@ export default function InvitationsPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Style de carte</h3>
             <div className="grid grid-cols-3 gap-2">
-              {INVITATION_STYLES.map(style => (
+              {styles.map(style => (
                 <button
                   key={style.id}
                   onClick={() => { setSelectedStyle(style); setSelectedColor(style.primaryColor) }}
                   className={cn('aspect-[3/4] rounded-xl border-2 overflow-hidden transition-all duration-200 relative',
-                    selectedStyle.id === style.id ? 'border-rose-500 ring-2 ring-rose-200' : 'border-gray-200 hover:border-rose-300'
+                    selectedStyle?.id === style.id ? 'border-rose-500 ring-2 ring-rose-200' : 'border-gray-200 hover:border-rose-300'
                   )}
                   aria-label={`Style ${style.name}`}
                 >
@@ -222,11 +255,11 @@ export default function InvitationsPage() {
           </div>
           <div className="p-4 bg-gray-50 rounded-xl">
             <p className="text-sm font-medium text-gray-700 mb-2">Message d'envoi</p>
-            <p className="text-sm text-gray-500">Sophie & Thomas vous invitent à leur mariage le 12 septembre 2026 ! Consultez votre invitation personnalisée ici : [lien]</p>
+            <p className="text-sm text-gray-500">{form.coupleNames} vous invitent à leur événement le {form.date} ! Consultez votre invitation personnalisée ici : [lien]</p>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-600 bg-blue-50 p-3 rounded-xl">
             <span>📩</span>
-            <span>63 invités recevront cette invitation</span>
+            <span>{event?.totalGuests ?? 0} invités recevront cette invitation</span>
           </div>
         </div>
       </Modal>

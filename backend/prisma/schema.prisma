@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ─────────────────────────────────────────────
+
+enum RsvpStatus {
+  accepted
+  pending
+  declined
+}
+
+enum EventStepType {
+  ceremonie
+  mairie
+  reception
+  soiree
+  religieux
+}
+
+enum EventType {
+  mariage
+  anniversaire
+  naissance
+  autre
+}
+
+enum MessageType {
+  message
+  sondage
+}
+
+enum GiftStatus {
+  disponible
+  reserve
+  offert
+}
+
+enum NotificationType {
+  rsvp
+  photo
+  gift
+  message
+  system
+}
+
+enum ActivityAction {
+  accepted
+  declined
+  pending
+  viewed
+}
+
+// ─── Models ────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  createdAt    DateTime @default(now())
+
+  events Event[]
+}
+
+model Event {
+  id            String    @id @default(cuid())
+  name          String
+  type          EventType
+  date          DateTime
+  venue         String
+  coupleNames   String?
+  coverImageUrl String?
+  token         String    @unique @default(cuid())
+
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  steps         EventStepInfo[]
+  guests        Guest[]
+  tables        SeatingTable[]
+  messages      Message[]
+  photos        Photo[]
+  gifts         GiftItem[]
+  kitties       KittyGoal[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+  settings      EventSettings?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EventSettings {
+  id            String  @id @default(cuid())
+  notifEmail    Boolean @default(true)
+  notifSms      Boolean @default(true)
+  notifRsvp     Boolean @default(true)
+  notifPhoto    Boolean @default(false)
+  notifGift     Boolean @default(true)
+  photoApproval Boolean @default(true)
+  publicAlbum   Boolean @default(false)
+  showGuestList Boolean @default(false)
+  language      String  @default("fr")
+  theme         String  @default("light")
+  guestLimit    Int?
+
+  eventId String @unique
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model EventStepInfo {
+  id      String        @id @default(cuid())
+  step    EventStepType
+  label   String
+  date    DateTime
+  time    String
+  address String
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, step])
+}
+
+model Guest {
+  id                  String          @id @default(cuid())
+  firstName           String
+  lastName            String
+  email               String
+  phone               String
+  rsvpStatus          RsvpStatus      @default(pending)
+  steps               EventStepType[]
+  familyGroup         String?
+  relatedGuestIds     String[]
+  avatarColor         String?
+  respondedAt         DateTime?
+  dietaryRestrictions String?
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  tableId String?
+  table   SeatingTable? @relation(fields: [tableId], references: [id], onDelete: SetNull)
+
+  photos             Photo[]
+  pollVotes          PollVote[]
+  giftReservations   GiftItem[]         @relation("GiftReservedBy")
+  kittyContributions KittyContributor[]
+  activityLogs       ActivityLog[]
+
+  createdAt DateTime @default(now())
+}
+
+model SeatingTable {
+  id        String  @id @default(cuid())
+  name      String
+  capacity  Int
+  shape     String?
+  positionX Float?
+  positionY Float?
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  guests Guest[]
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  type           MessageType
+  content        String
+  sentAt         DateTime?
+  scheduledAt    DateTime?
+  recipientCount Int           @default(0)
+  steps          EventStepType[]
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  poll Poll?
+
+  createdAt DateTime @default(now())
+}
+
+model Poll {
+  id          String  @id @default(cuid())
+  question    String
+  isAnonymous Boolean @default(false)
+
+  messageId String  @unique
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  options PollOption[]
+  votes   PollVote[]
+}
+
+model PollOption {
+  id   String @id @default(cuid())
+  text String
+
+  pollId String
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  votes PollVote[]
+}
+
+model PollVote {
+  id      String @id @default(cuid())
+  votedAt DateTime @default(now())
+
+  pollId String
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  optionId String
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  guestId String
+  guest   Guest  @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, guestId])
+}
+
+model Photo {
+  id           String   @id @default(cuid())
+  url          String
+  thumbnailUrl String
+  width        Int
+  height       Int
+  approved     Boolean  @default(false)
+  uploadedAt   DateTime @default(now())
+
+  guestId String
+  guest   Guest  @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model GiftItem {
+  id          String     @id @default(cuid())
+  name        String
+  description String
+  imageUrl    String
+  status      GiftStatus @default(disponible)
+  price       Float?
+  link        String?
+
+  reservedByName String?
+  reservedAt      DateTime?
+
+  reservedByGuestId String?
+  reservedByGuest   Guest?  @relation("GiftReservedBy", fields: [reservedByGuestId], references: [id], onDelete: SetNull)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model KittyGoal {
+  id            String   @id @default(cuid())
+  name          String
+  description   String
+  imageUrl      String?
+  targetAmount  Float
+  currentAmount Float    @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  contributors KittyContributor[]
+}
+
+model KittyContributor {
+  id            String   @id @default(cuid())
+  name          String
+  amount        Float
+  message       String?
+  avatarColor   String?
+  contributedAt DateTime @default(now())
+
+  kittyGoalId String
+  kittyGoal   KittyGoal @relation(fields: [kittyGoalId], references: [id], onDelete: Cascade)
+
+  guestId String?
+  guest   Guest?  @relation(fields: [guestId], references: [id], onDelete: SetNull)
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  body      String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id        String         @id @default(cuid())
+  action    ActivityAction
+  timestamp DateTime       @default(now())
+
+  guestId String
+  guest   Guest  @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}

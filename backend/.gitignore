@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+*.tsbuildinfo
+
+# uploaded files (keep the folder, ignore its contents)
+uploads/*
+!uploads/.gitkeep

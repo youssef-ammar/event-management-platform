@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DashboardTopbar } from '@/components/layout/DashboardTopbar'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -8,11 +8,15 @@ import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { AvatarGroup } from '@/components/ui/Avatar'
-import { mockGifts, mockKitties } from '@/lib/mockData'
+import { SkeletonCard } from '@/components/ui/Skeleton'
+import { useEvent } from '@/lib/hooks/useEvent'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { listGifts, reserveGift as reserveGiftApi } from '@/lib/api/gifts'
+import { listKitties, addContribution } from '@/lib/api/kitties'
+import { ApiError } from '@/lib/api/client'
 import type { GiftItem, KittyGoal } from '@/lib/types'
-import { Plus, Gift, Heart, Star, Banknote, Users } from 'lucide-react'
-import { formatCurrency, formatPercent } from '@/lib/utils/formatCurrency'
-import { formatDate } from '@/lib/utils/formatDate'
+import { Plus, Heart, Banknote, Users } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils/formatCurrency'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
 
@@ -22,17 +26,24 @@ const STATUS_CONFIG = {
   offert: { label: 'Offert', color: 'gray' as const },
 }
 
-function ContributionModal({ kitty, onClose }: { kitty: KittyGoal; onClose: () => void }) {
+function ContributionModal({ kitty, onClose, onContribute }: { kitty: KittyGoal; onClose: () => void; onContribute: (kittyId: string, body: { name: string; amount: number; message?: string }) => Promise<void> }) {
+  const { user } = useAuth()
   const [amount, setAmount] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleContribute = async () => {
+    if (!amount) return
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1000))
-    toast.success(`Merci pour votre contribution de ${amount}€ !`)
-    setLoading(false)
-    onClose()
+    try {
+      await onContribute(kitty.id, { name: user?.name ?? 'Invité anonyme', amount: Number(amount), message: message || undefined })
+      toast.success(`Merci pour votre contribution de ${amount}€ !`)
+      onClose()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -64,14 +75,34 @@ function ContributionModal({ kitty, onClose }: { kitty: KittyGoal; onClose: () =
 }
 
 export default function GiftsPage() {
-  const [gifts, setGifts] = useState<GiftItem[]>(mockGifts)
-  const [kitties] = useState<KittyGoal[]>(mockKitties)
+  const { eventId } = useEvent()
+  const [gifts, setGifts] = useState<GiftItem[]>([])
+  const [kitties, setKitties] = useState<KittyGoal[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedKitty, setSelectedKitty] = useState<KittyGoal | null>(null)
   const [activeTab, setActiveTab] = useState<'gifts' | 'kitty'>('gifts')
 
-  const reserveGift = (id: string) => {
-    setGifts(gs => gs.map(g => g.id === id ? { ...g, status: 'reserve', reservedBy: 'Invité anonyme' } : g))
-    toast.success('Cadeau réservé !')
+  useEffect(() => {
+    if (!eventId) return
+    setLoading(true)
+    Promise.all([listGifts(eventId), listKitties(eventId)])
+      .then(([g, k]) => { setGifts(g); setKitties(k) })
+      .finally(() => setLoading(false))
+  }, [eventId])
+
+  const reserveGift = async (id: string) => {
+    try {
+      const updated = await reserveGiftApi(eventId!, id, { reservedByName: 'Invité anonyme' })
+      setGifts(gs => gs.map(g => g.id === id ? updated : g))
+      toast.success('Cadeau réservé !')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    }
+  }
+
+  const handleContribute = async (kittyId: string, body: { name: string; amount: number; message?: string }) => {
+    const updated = await addContribution(eventId!, kittyId, body)
+    setKitties(ks => ks.map(k => k.id === kittyId ? updated : k))
   }
 
   return (
@@ -89,7 +120,11 @@ export default function GiftsPage() {
           </button>
         </div>
 
-        {activeTab === 'gifts' && (
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <SkeletonCard /><SkeletonCard /><SkeletonCard />
+          </div>
+        ) : activeTab === 'gifts' ? (
           <>
             <div className="flex items-center justify-between">
               <div className="flex gap-2">
@@ -137,9 +172,7 @@ export default function GiftsPage() {
               })}
             </div>
           </>
-        )}
-
-        {activeTab === 'kitty' && (
+        ) : (
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">{kitties.length} cagnotte{kitties.length > 1 ? 's' : ''} active{kitties.length > 1 ? 's' : ''}</p>
@@ -206,7 +239,7 @@ export default function GiftsPage() {
         )}
       </div>
 
-      {selectedKitty && <ContributionModal kitty={selectedKitty} onClose={() => setSelectedKitty(null)} />}
+      {selectedKitty && <ContributionModal kitty={selectedKitty} onClose={() => setSelectedKitty(null)} onContribute={handleContribute} />}
     </>
   )
 }

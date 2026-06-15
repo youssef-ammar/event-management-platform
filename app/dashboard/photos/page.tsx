@@ -1,22 +1,31 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DashboardTopbar } from '@/components/layout/DashboardTopbar'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Modal } from '@/components/ui/Modal'
-import { mockPhotos } from '@/lib/mockData'
+import { SkeletonPhotoGrid } from '@/components/ui/Skeleton'
+import { useEvent } from '@/lib/hooks/useEvent'
+import { listPhotos, updatePhotoApproval } from '@/lib/api/photos'
+import { ApiError } from '@/lib/api/client'
 import type { Photo } from '@/lib/types'
-import { Camera, ChevronLeft, ChevronRight, Download, X, Check, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, X, Check, AlertCircle } from 'lucide-react'
 import { formatDate } from '@/lib/utils/formatDate'
-import Image from 'next/image'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
 
 export default function PhotosPage() {
-  const [photos, setPhotos] = useState<Photo[]>(mockPhotos)
+  const { eventId } = useEvent()
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const [loading, setLoading] = useState(true)
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
   const [view, setView] = useState<'grid' | 'guests'>('grid')
+
+  useEffect(() => {
+    if (!eventId) return
+    setLoading(true)
+    listPhotos(eventId).then(setPhotos).finally(() => setLoading(false))
+  }, [eventId])
 
   const approved = photos.filter(p => p.approved)
   const pending = photos.filter(p => !p.approved)
@@ -25,7 +34,16 @@ export default function PhotosPage() {
   const closeLightbox = () => setLightboxIdx(null)
   const prevPhoto = () => setLightboxIdx(i => i !== null && i > 0 ? i - 1 : i)
   const nextPhoto = () => setLightboxIdx(i => i !== null && i < photos.length - 1 ? i + 1 : i)
-  const approvePhoto = (id: string) => { setPhotos(ps => ps.map(p => p.id === id ? { ...p, approved: true } : p)); toast.success('Photo approuvée') }
+
+  const approvePhoto = async (id: string) => {
+    try {
+      const updated = await updatePhotoApproval(eventId!, id, { approved: true })
+      setPhotos(ps => ps.map(p => p.id === id ? updated : p))
+      toast.success('Photo approuvée')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    }
+  }
 
   const guestSummary = photos.reduce((acc, p) => {
     if (!acc[p.guestId]) acc[p.guestId] = { name: p.guestName, count: 0, approved: 0 }
@@ -65,7 +83,9 @@ export default function PhotosPage() {
           )}
         </div>
 
-        {view === 'grid' ? (
+        {loading ? (
+          <SkeletonPhotoGrid />
+        ) : view === 'grid' ? (
           <>
             {pending.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">

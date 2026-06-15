@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { DashboardTopbar } from '@/components/layout/DashboardTopbar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -8,10 +8,13 @@ import { Badge } from '@/components/ui/Badge'
 import { Avatar } from '@/components/ui/Avatar'
 import { Modal } from '@/components/ui/Modal'
 import { Tabs } from '@/components/ui/Tabs'
-import { Toggle } from '@/components/ui/Toggle'
 import { Select } from '@/components/ui/Dropdown'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { mockGuests } from '@/lib/mockData'
+import { SkeletonTable } from '@/components/ui/Skeleton'
+import { useEvent } from '@/lib/hooks/useEvent'
+import { useGuests } from '@/lib/hooks/useGuests'
+import { AVATAR_COLORS } from '@/lib/constants'
+import { ApiError } from '@/lib/api/client'
 import type { Guest, RSVPStatus, EventStep } from '@/lib/types'
 import { Plus, Search, Download, Bell, Pencil, Trash2, Upload, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -36,13 +39,6 @@ const RSVP_LABELS: Record<RSVPStatus, string> = {
   declined: 'Refusé',
 }
 
-const tabs = [
-  { id: 'all', label: 'Tous', count: mockGuests.length },
-  { id: 'accepted', label: 'Acceptés', count: mockGuests.filter(g => g.rsvpStatus === 'accepted').length },
-  { id: 'pending', label: 'En attente', count: mockGuests.filter(g => g.rsvpStatus === 'pending').length },
-  { id: 'declined', label: 'Refusés', count: mockGuests.filter(g => g.rsvpStatus === 'declined').length },
-]
-
 function GuestModal({ guest, onClose, onSave }: { guest?: Partial<Guest>; onClose: () => void; onSave: (g: Partial<Guest>) => void }) {
   const [form, setForm] = useState<Partial<Guest>>(guest || { rsvpStatus: 'pending', steps: [] })
 
@@ -63,7 +59,7 @@ function GuestModal({ guest, onClose, onSave }: { guest?: Partial<Guest>; onClos
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Annuler</Button>
-          <Button onClick={() => { onSave(form); toast.success('Invité sauvegardé !') }}>Sauvegarder</Button>
+          <Button onClick={() => onSave(form)}>Sauvegarder</Button>
         </>
       }
     >
@@ -110,35 +106,54 @@ function GuestModal({ guest, onClose, onSave }: { guest?: Partial<Guest>; onClos
 }
 
 export default function GuestsPage() {
-  const [guests, setGuests] = useState<Guest[]>(mockGuests)
-  const [filter, setFilter] = useState('all')
-  const [search, setSearch] = useState('')
+  const { eventId } = useEvent()
+  const { guests, filtered, stats, filter, setFilter, search, setSearch, addGuest, updateGuest, deleteGuest, loading } = useGuests(eventId)
   const [showModal, setShowModal] = useState(false)
   const [editGuest, setEditGuest] = useState<Guest | undefined>()
   const [selected, setSelected] = useState<string[]>([])
 
-  const filtered = guests.filter(g => {
-    const matchStatus = filter === 'all' || g.rsvpStatus === filter
-    const matchSearch = !search || `${g.firstName} ${g.lastName} ${g.email} ${g.phone}`.toLowerCase().includes(search.toLowerCase())
-    return matchStatus && matchSearch
-  })
+  const tabs = useMemo(() => [
+    { id: 'all', label: 'Tous', count: stats.total },
+    { id: 'accepted', label: 'Acceptés', count: stats.accepted },
+    { id: 'pending', label: 'En attente', count: stats.pending },
+    { id: 'declined', label: 'Refusés', count: stats.declined },
+  ], [stats])
 
   const toggleSelect = (id: string) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
   const toggleAll = () => setSelected(selected.length === filtered.length ? [] : filtered.map(g => g.id))
 
-  const handleSave = (form: Partial<Guest>) => {
-    if (editGuest) {
-      setGuests(gs => gs.map(g => g.id === editGuest.id ? { ...g, ...form } : g))
-    } else {
-      setGuests(gs => [...gs, { ...form, id: `g${Date.now()}`, avatarColor: '#C9748F' } as Guest])
+  const handleSave = async (form: Partial<Guest>) => {
+    try {
+      if (editGuest) {
+        await updateGuest(editGuest.id, form)
+      } else {
+        await addGuest({ ...form, avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)] })
+      }
+      toast.success('Invité sauvegardé !')
+      setShowModal(false)
+      setEditGuest(undefined)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
     }
-    setShowModal(false)
-    setEditGuest(undefined)
   }
 
-  const handleDelete = (id: string) => {
-    setGuests(gs => gs.filter(g => g.id !== id))
-    toast.success('Invité supprimé')
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteGuest(id)
+      toast.success('Invité supprimé')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    try {
+      await Promise.all(selected.map(id => deleteGuest(id)))
+      setSelected([])
+      toast.success('Invités supprimés')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    }
   }
 
   return (
@@ -170,7 +185,7 @@ export default function GuestsPage() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <Tabs tabs={tabs} activeTab={filter} onChange={setFilter} variant="pill" />
+          <Tabs tabs={tabs} activeTab={filter} onChange={v => setFilter(v as RSVPStatus | 'all')} variant="pill" />
         </div>
 
         {/* Bulk actions */}
@@ -179,106 +194,112 @@ export default function GuestsPage() {
             <span className="text-sm font-medium text-rose-700">{selected.length} sélectionné(s)</span>
             <Button size="xs" leftIcon={<Bell className="w-3 h-3" />} onClick={() => toast.success('Rappels envoyés !')}>Envoyer rappel</Button>
             <Button size="xs" variant="outlined" leftIcon={<Download className="w-3 h-3" />}>Exporter</Button>
-            <Button size="xs" variant="danger" leftIcon={<Trash2 className="w-3 h-3" />} onClick={() => { setGuests(gs => gs.filter(g => !selected.includes(g.id))); setSelected([]); toast.success('Invités supprimés') }}>Supprimer</Button>
+            <Button size="xs" variant="danger" leftIcon={<Trash2 className="w-3 h-3" />} onClick={handleBulkDelete}>Supprimer</Button>
           </div>
         )}
 
-        {/* Desktop Table */}
-        <div className="hidden md:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-3 text-left w-10">
-                  <input type="checkbox" className="rounded" checked={selected.length === filtered.length && filtered.length > 0} onChange={toggleAll} aria-label="Tout sélectionner" />
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Invité</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Contact</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Statut RSVP</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Étapes</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>
-                    <EmptyState icon={<Users className="w-6 h-6" />} title="Aucun invité trouvé" description="Ajoutez votre premier invité ou modifiez la recherche." />
-                  </td>
-                </tr>
-              ) : filtered.map(guest => (
-                <tr key={guest.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <input type="checkbox" className="rounded" checked={selected.includes(guest.id)} onChange={() => toggleSelect(guest.id)} aria-label={`Sélectionner ${guest.firstName}`} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar name={`${guest.firstName} ${guest.lastName}`} size="sm" color={guest.avatarColor} />
-                      <div>
-                        <p className="font-medium text-gray-900">{guest.firstName} {guest.lastName}</p>
-                        {guest.familyGroup && <p className="text-xs text-gray-400">{guest.familyGroup}</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">
-                    <p className="text-sm">{guest.email}</p>
-                    <p className="text-xs text-gray-400">{guest.phone}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge color={RSVP_COLORS[guest.rsvpStatus]} dot>{RSVP_LABELS[guest.rsvpStatus]}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {guest.steps.map(step => (
-                        <span key={step} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                          {STEP_LABELS[step]}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => toast.success(`Rappel envoyé à ${guest.firstName} !`)} aria-label="Envoyer rappel" className="p-1.5 rounded-lg text-gray-400 hover:bg-amber-50 hover:text-amber-500 transition-colors">
-                        <Bell className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => { setEditGuest(guest); setShowModal(true) }} aria-label="Modifier" className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-colors">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete(guest.id)} aria-label="Supprimer" className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Cards */}
-        <div className="md:hidden space-y-3">
-          {filtered.map(guest => (
-            <div key={guest.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <Avatar name={`${guest.firstName} ${guest.lastName}`} size="md" color={guest.avatarColor} />
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">{guest.firstName} {guest.lastName}</p>
-                  <p className="text-sm text-gray-400">{guest.phone}</p>
-                </div>
-                <Badge color={RSVP_COLORS[guest.rsvpStatus]} dot size="sm">{RSVP_LABELS[guest.rsvpStatus]}</Badge>
-              </div>
-              <div className="flex flex-wrap gap-1 mb-3">
-                {guest.steps.map(step => (
-                  <span key={step} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{STEP_LABELS[step]}</span>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Button size="xs" variant="ghost" leftIcon={<Bell className="w-3 h-3" />} onClick={() => toast.success('Rappel envoyé !')}>Rappel</Button>
-                <Button size="xs" variant="ghost" leftIcon={<Pencil className="w-3 h-3" />} onClick={() => { setEditGuest(guest); setShowModal(true) }}>Modifier</Button>
-                <Button size="xs" variant="danger" leftIcon={<Trash2 className="w-3 h-3" />} onClick={() => handleDelete(guest.id)}>Supprimer</Button>
-              </div>
+        {loading ? (
+          <SkeletonTable rows={6} />
+        ) : (
+          <>
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="px-4 py-3 text-left w-10">
+                      <input type="checkbox" className="rounded" checked={selected.length === filtered.length && filtered.length > 0} onChange={toggleAll} aria-label="Tout sélectionner" />
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Invité</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Contact</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Statut RSVP</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Étapes</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={6}>
+                        <EmptyState icon={<Users className="w-6 h-6" />} title="Aucun invité trouvé" description="Ajoutez votre premier invité ou modifiez la recherche." />
+                      </td>
+                    </tr>
+                  ) : filtered.map(guest => (
+                    <tr key={guest.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <input type="checkbox" className="rounded" checked={selected.includes(guest.id)} onChange={() => toggleSelect(guest.id)} aria-label={`Sélectionner ${guest.firstName}`} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={`${guest.firstName} ${guest.lastName}`} size="sm" color={guest.avatarColor} />
+                          <div>
+                            <p className="font-medium text-gray-900">{guest.firstName} {guest.lastName}</p>
+                            {guest.familyGroup && <p className="text-xs text-gray-400">{guest.familyGroup}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">
+                        <p className="text-sm">{guest.email}</p>
+                        <p className="text-xs text-gray-400">{guest.phone}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge color={RSVP_COLORS[guest.rsvpStatus]} dot>{RSVP_LABELS[guest.rsvpStatus]}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {guest.steps.map(step => (
+                            <span key={step} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                              {STEP_LABELS[step]}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => toast.success(`Rappel envoyé à ${guest.firstName} !`)} aria-label="Envoyer rappel" className="p-1.5 rounded-lg text-gray-400 hover:bg-amber-50 hover:text-amber-500 transition-colors">
+                            <Bell className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => { setEditGuest(guest); setShowModal(true) }} aria-label="Modifier" className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-colors">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDelete(guest.id)} aria-label="Supprimer" className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+              {filtered.map(guest => (
+                <div key={guest.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Avatar name={`${guest.firstName} ${guest.lastName}`} size="md" color={guest.avatarColor} />
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900">{guest.firstName} {guest.lastName}</p>
+                      <p className="text-sm text-gray-400">{guest.phone}</p>
+                    </div>
+                    <Badge color={RSVP_COLORS[guest.rsvpStatus]} dot size="sm">{RSVP_LABELS[guest.rsvpStatus]}</Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {guest.steps.map(step => (
+                      <span key={step} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{STEP_LABELS[step]}</span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="xs" variant="ghost" leftIcon={<Bell className="w-3 h-3" />} onClick={() => toast.success('Rappel envoyé !')}>Rappel</Button>
+                    <Button size="xs" variant="ghost" leftIcon={<Pencil className="w-3 h-3" />} onClick={() => { setEditGuest(guest); setShowModal(true) }}>Modifier</Button>
+                    <Button size="xs" variant="danger" leftIcon={<Trash2 className="w-3 h-3" />} onClick={() => handleDelete(guest.id)}>Supprimer</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {showModal && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DashboardTopbar } from '@/components/layout/DashboardTopbar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -8,7 +8,10 @@ import { Badge } from '@/components/ui/Badge'
 import { Toggle } from '@/components/ui/Toggle'
 import { Textarea } from '@/components/ui/Input'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { mockMessages } from '@/lib/mockData'
+import { SkeletonCard } from '@/components/ui/Skeleton'
+import { useEvent } from '@/lib/hooks/useEvent'
+import { listMessages, createMessage } from '@/lib/api/messages'
+import { ApiError } from '@/lib/api/client'
 import type { Message, Poll } from '@/lib/types'
 import { MessageSquare, Plus, BarChart2, Users, Send, X, BarChart3 } from 'lucide-react'
 import { formatDate } from '@/lib/utils/formatDate'
@@ -37,7 +40,7 @@ function PollResultsModal({ poll, onClose }: { poll: Poll; onClose: () => void }
   )
 }
 
-function NewMessageModal({ onClose, onSend }: { onClose: () => void; onSend: (m: Partial<Message>) => void }) {
+function NewMessageModal({ totalGuests, onClose, onSend }: { totalGuests: number; onClose: () => void; onSend: (m: { type: 'message' | 'sondage'; content: string; poll?: { question: string; isAnonymous?: boolean; options: string[] } }) => Promise<void> }) {
   const [type, setType] = useState<'message' | 'sondage'>('message')
   const [content, setContent] = useState('')
   const [question, setQuestion] = useState('')
@@ -51,11 +54,20 @@ function NewMessageModal({ onClose, onSend }: { onClose: () => void; onSend: (m:
 
   const handleSend = async () => {
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1000))
-    onSend({ type, content: type === 'message' ? content : question, recipientCount: 63 })
-    setLoading(false)
-    toast.success(type === 'message' ? 'Message envoyé !' : 'Sondage envoyé !')
-    onClose()
+    try {
+      if (type === 'message') {
+        await onSend({ type, content })
+        toast.success('Message envoyé !')
+      } else {
+        await onSend({ type, content: question, poll: { question, isAnonymous, options: options.filter(o => o.trim()) } })
+        toast.success('Sondage envoyé !')
+      }
+      onClose()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -99,7 +111,7 @@ function NewMessageModal({ onClose, onSend }: { onClose: () => void; onSend: (m:
           />
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Users className="w-4 h-4" />
-            <span>Envoyé à tous les 63 invités</span>
+            <span>Envoyé à tous les {totalGuests} invités</span>
           </div>
         </div>
       ) : (
@@ -142,15 +154,21 @@ function NewMessageModal({ onClose, onSend }: { onClose: () => void; onSend: (m:
 }
 
 export default function MessagingPage() {
-  const [messages, setMessages] = useState<Message[]>(mockMessages)
+  const { event, eventId } = useEvent()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [loading, setLoading] = useState(true)
   const [showNewModal, setShowNewModal] = useState(false)
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null)
 
-  const handleSend = (m: Partial<Message>) => {
-    setMessages(prev => [{
-      id: `m${Date.now()}`, type: m.type || 'message', content: m.content || '',
-      sentAt: new Date().toISOString(), recipientCount: 63,
-    }, ...prev])
+  useEffect(() => {
+    if (!eventId) return
+    setLoading(true)
+    listMessages(eventId).then(setMessages).finally(() => setLoading(false))
+  }, [eventId])
+
+  const handleSend = async (m: { type: 'message' | 'sondage'; content: string; poll?: { question: string; isAnonymous?: boolean; options: string[] } }) => {
+    const created = await createMessage(eventId!, m)
+    setMessages(prev => [created, ...prev])
   }
 
   return (
@@ -168,54 +186,62 @@ export default function MessagingPage() {
           </Button>
         </div>
 
-        <div className="space-y-4">
-          {messages.map(msg => (
-            <div key={msg.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex gap-3 items-start flex-1">
-                  <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', msg.type === 'sondage' ? 'bg-purple-100' : 'bg-blue-100')}>
-                    {msg.type === 'sondage' ? <BarChart2 className="w-5 h-5 text-purple-600" /> : <MessageSquare className="w-5 h-5 text-blue-600" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <Badge color={msg.type === 'sondage' ? 'purple' : 'blue'} size="sm">
-                        {msg.type === 'sondage' ? 'Sondage' : 'Message'}
-                      </Badge>
-                      <span className="text-xs text-gray-400">{formatDate(msg.sentAt)}</span>
-                      <span className="text-xs text-gray-400 flex items-center gap-1">
-                        <Users className="w-3 h-3" /> {msg.recipientCount} invités
-                      </span>
+        {loading ? (
+          <div className="space-y-4">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {messages.map(msg => (
+              <div key={msg.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex gap-3 items-start flex-1">
+                    <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', msg.type === 'sondage' ? 'bg-purple-100' : 'bg-blue-100')}>
+                      {msg.type === 'sondage' ? <BarChart2 className="w-5 h-5 text-purple-600" /> : <MessageSquare className="w-5 h-5 text-blue-600" />}
                     </div>
-                    <p className="text-sm text-gray-700 line-clamp-2">{msg.content}</p>
-                    {msg.poll && (
-                      <div className="mt-3 p-3 bg-purple-50 rounded-xl">
-                        <p className="text-xs font-semibold text-purple-700 mb-2">{msg.poll.totalResponses} réponses</p>
-                        <div className="space-y-1.5">
-                          {msg.poll.options.slice(0, 2).map(opt => (
-                            <div key={opt.id} className="flex items-center gap-2">
-                              <div className="flex-1 h-1.5 bg-purple-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-purple-400 rounded-full" style={{ width: `${msg.poll!.totalResponses ? (opt.count / msg.poll!.totalResponses) * 100 : 0}%` }} />
-                              </div>
-                              <span className="text-xs text-purple-600 w-16 text-right">{opt.text}: {opt.count}</span>
-                            </div>
-                          ))}
-                        </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <Badge color={msg.type === 'sondage' ? 'purple' : 'blue'} size="sm">
+                          {msg.type === 'sondage' ? 'Sondage' : 'Message'}
+                        </Badge>
+                        <span className="text-xs text-gray-400">{formatDate(msg.sentAt)}</span>
+                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                          <Users className="w-3 h-3" /> {msg.recipientCount} invités
+                        </span>
                       </div>
-                    )}
+                      <p className="text-sm text-gray-700 line-clamp-2">{msg.content}</p>
+                      {msg.poll && (
+                        <div className="mt-3 p-3 bg-purple-50 rounded-xl">
+                          <p className="text-xs font-semibold text-purple-700 mb-2">{msg.poll.totalResponses} réponses</p>
+                          <div className="space-y-1.5">
+                            {msg.poll.options.slice(0, 2).map(opt => (
+                              <div key={opt.id} className="flex items-center gap-2">
+                                <div className="flex-1 h-1.5 bg-purple-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-purple-400 rounded-full" style={{ width: `${msg.poll!.totalResponses ? (opt.count / msg.poll!.totalResponses) * 100 : 0}%` }} />
+                                </div>
+                                <span className="text-xs text-purple-600 w-16 text-right">{opt.text}: {opt.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  {msg.poll && (
+                    <Button size="xs" variant="outlined" leftIcon={<BarChart3 className="w-3 h-3" />} onClick={() => setSelectedPoll(msg.poll!)}>
+                      Résultats
+                    </Button>
+                  )}
                 </div>
-                {msg.poll && (
-                  <Button size="xs" variant="outlined" leftIcon={<BarChart3 className="w-3 h-3" />} onClick={() => setSelectedPoll(msg.poll!)}>
-                    Résultats
-                  </Button>
-                )}
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {showNewModal && <NewMessageModal onClose={() => setShowNewModal(false)} onSend={handleSend} />}
+      {showNewModal && <NewMessageModal totalGuests={event?.totalGuests ?? 0} onClose={() => setShowNewModal(false)} onSend={handleSend} />}
       {selectedPoll && <PollResultsModal poll={selectedPoll} onClose={() => setSelectedPoll(null)} />}
     </>
   )

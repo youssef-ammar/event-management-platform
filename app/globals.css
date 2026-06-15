@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    color-scheme: light;
     --color-primary: #C9748F;
     --color-primary-hover: #B85A77;
     --color-secondary: #D4AF7A;

@@ -7,9 +7,12 @@ import { Input } from '@/components/ui/Input'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { ApiError } from '@/lib/api/client'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -30,10 +33,15 @@ export default function LoginPage() {
     e.preventDefault()
     if (!validate()) return
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1200))
-    setLoading(false)
-    toast.success('Connexion réussie !')
-    router.push('/dashboard')
+    try {
+      await login(email, password)
+      toast.success('Connexion réussie !')
+      router.push('/dashboard')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

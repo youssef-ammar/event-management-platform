@@ -1,9 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { mockEvent, mockGuests, mockTables } from '@/lib/mockData'
-import type { EventStep } from '@/lib/types'
-import { MapPin, Clock, Calendar, Image, Grid3X3, Check, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { getInvite, getGuestByEmail, getPublicTables, submitRsvp } from '@/lib/api/invite'
+import { ApiError } from '@/lib/api/client'
+import { useLocalStorage } from '@/lib/hooks/useLocalStorage'
+import { AVATAR_COLORS } from '@/lib/constants'
+import type { Event, EventStep, EventType, Guest, PublicSeatingTable, RSVPStatus } from '@/lib/types'
+import { MapPin, Clock, Calendar, Check, X, Mail } from 'lucide-react'
+import { formatDate } from '@/lib/utils/formatDate'
+import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
 
 const STEP_LABELS: Record<EventStep, string> = {
@@ -18,22 +23,140 @@ const STEP_ICONS: Record<EventStep, string> = {
   ceremonie: '💐', mairie: '🏛️', reception: '🥂', soiree: '🎊', religieux: '⛪',
 }
 
+const EVENT_TYPE_LABELS: Record<EventType, string> = {
+  mariage: 'Mariage',
+  anniversaire: 'Anniversaire',
+  naissance: 'Naissance',
+  autre: 'Événement',
+}
+
 type RSVPAnswers = Partial<Record<EventStep, 'yes' | 'no'>>
 
 export default function InvitePage({ params }: { params: { token: string } }) {
-  const guest = mockGuests[0]
-  const event = mockEvent
+  const { token } = params
+  const [event, setEvent] = useState<Event>()
+  const [eventLoading, setEventLoading] = useState(true)
+  const [tables, setTables] = useState<PublicSeatingTable[]>([])
+
+  const [inviteEmails, setInviteEmails] = useLocalStorage<Record<string, string>>('fairepart_invite_emails', {})
+  const [guest, setGuest] = useState<Guest>()
+  const [guestLoading, setGuestLoading] = useState(true)
+  const [emailInput, setEmailInput] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [checkingEmail, setCheckingEmail] = useState(false)
+
   const [rsvp, setRsvp] = useState<RSVPAnswers>({})
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [view, setView] = useState<'invitation' | 'seating'>('invitation')
 
-  const guestTable = mockTables.find(t => t.guests.includes(guest.id))
-  const tablemates = guestTable ? mockGuests.filter(g => guestTable.guests.includes(g.id) && g.id !== guest.id) : []
+  useEffect(() => {
+    getInvite(token).then(setEvent).finally(() => setEventLoading(false))
+    getPublicTables(token).then(setTables).catch(() => {})
+  }, [token])
 
-  const handleSubmit = () => {
-    setSubmitted(true)
+  useEffect(() => {
+    const email = inviteEmails[token]
+    if (!email) {
+      setGuestLoading(false)
+      return
+    }
+    setGuestLoading(true)
+    getGuestByEmail(token, email)
+      .then(setGuest)
+      .catch(() => setInviteEmails(m => {
+        const rest = { ...m }
+        delete rest[token]
+        return rest
+      }))
+      .finally(() => setGuestLoading(false))
+  }, [token, inviteEmails[token]])
+
+  const handleEmailSubmit = async () => {
+    if (!emailInput.trim()) return
+    setCheckingEmail(true)
+    setEmailError('')
+    try {
+      const g = await getGuestByEmail(token, emailInput.trim())
+      setGuest(g)
+      setInviteEmails(m => ({ ...m, [token]: emailInput.trim() }))
+    } catch {
+      setEmailError('Aucun invité trouvé avec cet email.')
+    } finally {
+      setCheckingEmail(false)
+    }
   }
 
+  const handleSubmit = async () => {
+    if (!guest) return
+    setSubmitting(true)
+    try {
+      const steps = (Object.entries(rsvp) as [EventStep, 'yes' | 'no'][]).filter(([, v]) => v === 'yes').map(([k]) => k)
+      const rsvpStatus: RSVPStatus = steps.length > 0 ? 'accepted' : 'declined'
+      await submitRsvp(token, guest.id, { rsvpStatus, steps, dietaryRestrictions: guest.dietaryRestrictions })
+      setSubmitted(true)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (eventLoading || guestLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-rose-50 to-amber-50 flex items-center justify-center px-4">
+        <p className="text-gray-400 animate-pulse">Chargement de votre invitation…</p>
+      </div>
+    )
+  }
+
+  if (!event) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-rose-50 to-amber-50 flex items-center justify-center px-4 text-center">
+        <div>
+          <p className="text-4xl mb-3">😕</p>
+          <h1 className="font-playfair text-2xl font-bold text-gray-900 mb-2">Invitation introuvable</h1>
+          <p className="text-gray-500 text-sm">Ce lien d'invitation n'est pas valide.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!guest) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-rose-50 to-amber-50 flex items-center justify-center px-4">
+        <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-rose-100 p-8 max-w-sm w-full text-center animate-fade-in">
+          <p className="font-cormorant italic text-rose-400 text-lg mb-1">{EVENT_TYPE_LABELS[event.type]}</p>
+          <h1 className="font-playfair text-2xl font-bold text-gray-800 mb-6">{event.coupleNames ?? event.name}</h1>
+          <p className="text-sm text-gray-600 mb-4">Pour accéder à votre invitation, merci de saisir votre adresse email.</p>
+          <div className="space-y-3">
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="email"
+                placeholder="vous@email.fr"
+                value={emailInput}
+                onChange={e => setEmailInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleEmailSubmit()}
+                className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400"
+              />
+            </div>
+            {emailError && <p className="text-sm text-red-500">{emailError}</p>}
+            <button
+              onClick={handleEmailSubmit}
+              disabled={checkingEmail || !emailInput.trim()}
+              className="w-full py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-rose-500 to-[#D4AF7A] text-white shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+            >
+              {checkingEmail ? 'Vérification…' : 'Accéder à mon invitation'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const guestTable = tables.find(t => t.guests.some(g => g.id === guest.id))
+  const tablemates = guestTable ? guestTable.guests.filter(g => g.id !== guest.id) : []
   const answeredAll = guest.steps.every(step => rsvp[step] !== undefined)
 
   if (submitted) {
@@ -52,8 +175,8 @@ export default function InvitePage({ params }: { params: { token: string } }) {
             Votre réponse a bien été enregistrée. Nous avons hâte de vous retrouver pour ce moment inoubliable.
           </p>
           <div className="mt-8 p-4 bg-white rounded-2xl shadow-sm border border-rose-100">
-            <p className="font-playfair italic text-rose-500">Sophie & Thomas</p>
-            <p className="text-sm text-gray-500 mt-1">{event.date}</p>
+            <p className="font-playfair italic text-rose-500">{event.coupleNames ?? event.name}</p>
+            <p className="text-sm text-gray-500 mt-1">{formatDate(event.date)}</p>
           </div>
         </div>
       </div>
@@ -91,8 +214,8 @@ export default function InvitePage({ params }: { params: { token: string } }) {
               ))}
             </div>
             <div className="text-center z-10">
-              <p className="font-cormorant italic text-rose-400 text-lg mb-1">Mariage</p>
-              <h1 className="font-playfair text-4xl font-bold text-gray-800">{event.coupleNames}</h1>
+              <p className="font-cormorant italic text-rose-400 text-lg mb-1">{EVENT_TYPE_LABELS[event.type]}</p>
+              <h1 className="font-playfair text-4xl font-bold text-gray-800">{event.coupleNames ?? event.name}</h1>
               <div className="w-16 h-0.5 bg-[#D4AF7A] mx-auto mt-3" />
             </div>
           </div>
@@ -104,7 +227,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-gray-600">
                 <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center text-rose-500"><Calendar className="w-4 h-4" /></div>
-                <span className="text-sm font-medium">12 septembre 2026</span>
+                <span className="text-sm font-medium">{formatDate(event.date)}</span>
               </div>
               <div className="flex items-center gap-3 text-gray-600">
                 <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center text-rose-500"><MapPin className="w-4 h-4" /></div>
@@ -213,15 +336,15 @@ export default function InvitePage({ params }: { params: { token: string } }) {
             {/* Submit button */}
             <button
               onClick={handleSubmit}
-              disabled={!answeredAll}
+              disabled={!answeredAll || submitting}
               className={cn(
                 'w-full py-4 rounded-2xl text-base font-bold transition-all duration-300 shadow-lg',
                 answeredAll
-                  ? 'bg-gradient-to-r from-rose-500 to-[#D4AF7A] text-white hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]'
+                  ? 'bg-gradient-to-r from-rose-500 to-[#D4AF7A] text-white hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60'
                   : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               )}
             >
-              {answeredAll ? '✨ Confirmer mes réponses' : `Répondre à toutes les étapes (${Object.keys(rsvp).length}/${guest.steps.length})`}
+              {answeredAll ? (submitting ? 'Envoi…' : '✨ Confirmer mes réponses') : `Répondre à toutes les étapes (${Object.keys(rsvp).length}/${guest.steps.length})`}
             </button>
           </>
         )}
@@ -240,14 +363,13 @@ export default function InvitePage({ params }: { params: { token: string } }) {
                 <div className="bg-white/90 rounded-2xl border border-gray-100 shadow-sm p-5">
                   <h3 className="font-semibold text-gray-900 mb-4">Vos voisins de table</h3>
                   <div className="space-y-3">
-                    {tablemates.map(tm => (
+                    {tablemates.map((tm, idx) => (
                       <div key={tm.id} className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: tm.avatarColor }}>
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: AVATAR_COLORS[idx % AVATAR_COLORS.length] }}>
                           {tm.firstName[0]}{tm.lastName[0]}
                         </div>
                         <div>
                           <p className="font-medium text-sm text-gray-900">{tm.firstName} {tm.lastName}</p>
-                          {tm.familyGroup && <p className="text-xs text-gray-400">{tm.familyGroup}</p>}
                         </div>
                       </div>
                     ))}

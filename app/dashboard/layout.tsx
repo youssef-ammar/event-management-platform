@@ -1,12 +1,24 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MobileNav } from '@/components/layout/MobileNav'
-import type { Metadata } from 'next'
-
-export const metadata: Metadata = {
-  title: { default: 'Dashboard', template: '%s | Fairepart Dashboard' },
-}
+import { useAuth } from '@/lib/hooks/useAuth'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const { isAuthenticated } = useAuth()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    if (mounted && !isAuthenticated) router.replace('/auth/login')
+  }, [mounted, isAuthenticated, router])
+
+  if (!mounted || !isAuthenticated) return null
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar />

@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { useFacebookAuth } from '@/lib/hooks/useFacebookAuth'
 import { createEvent } from '@/lib/api/events'
 import { ApiError } from '@/lib/api/client'
 import type { EventType } from '@/lib/types'
@@ -24,9 +25,11 @@ const STEPS = ['Votre compte', 'Votre événement', 'Finalisation']
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { register } = useAuth()
+  const { register, loginWithFacebook } = useAuth()
+  const { loginWithFacebook: facebookSdkLogin } = useFacebookAuth()
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [facebookLoading, setFacebookLoading] = useState(false)
   const [completed, setCompleted] = useState(false)
 
   const [form, setForm] = useState({
@@ -79,6 +82,20 @@ export default function RegisterPage() {
       toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleFacebookSignup = async () => {
+    setFacebookLoading(true)
+    try {
+      const accessToken = await facebookSdkLogin()
+      await loginWithFacebook(accessToken)
+      toast.success('Compte créé !')
+      router.push('/dashboard')
+    } catch (err) {
+      toast.error(err instanceof ApiError || err instanceof Error ? err.message : 'Une erreur est survenue')
+    } finally {
+      setFacebookLoading(false)
     }
   }
 
@@ -150,6 +167,23 @@ export default function RegisterPage() {
                 rightIcon={<button type="button" onClick={() => setShowPass(!showPass)}>{showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>} />
               <Input label="Confirmer le mot de passe" type="password" placeholder="••••••••" value={form.confirmPassword}
                 onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} error={errors.confirmPassword} leftIcon={<Lock className="w-4 h-4" />} />
+
+              <div className="relative my-5">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+                <div className="relative flex justify-center"><span className="px-3 bg-white text-gray-400 text-sm">ou</span></div>
+              </div>
+
+              <button
+                type="button"
+                disabled={facebookLoading}
+                className="w-full flex items-center justify-center gap-3 py-3 border border-gray-200 rounded-full hover:border-gray-300 hover:bg-gray-50 transition-all font-medium text-sm text-gray-700 disabled:opacity-60"
+                onClick={handleFacebookSignup}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#1877F2">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                </svg>
+                Continuer avec Facebook
+              </button>
             </div>
           )}
 

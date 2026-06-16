@@ -30,6 +30,7 @@ const pollSchema = z.object({
 const createMessageSchema = z.object({
   type: z.enum(['message', 'sondage']),
   content: z.string().min(1),
+  channel: z.enum(['whatsapp', 'sms', 'email', 'link', 'facebook']).optional(),
   steps: z.array(z.enum(EVENT_STEP_TYPES)).optional(),
   scheduledAt: z.string().optional(),
   poll: pollSchema.optional(),
@@ -72,6 +73,7 @@ router.post(
       data: {
         type: data.type,
         content: data.content,
+        channel: data.channel ?? 'link',
         steps: data.steps ?? [],
         scheduledAt,
         sentAt,

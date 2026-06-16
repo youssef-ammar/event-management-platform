@@ -20,6 +20,13 @@ export function login(email: string, password: string) {
   })
 }
 
+export function loginWithFacebook(accessToken: string) {
+  return apiFetch<AuthResponse>('/auth/facebook', {
+    method: 'POST',
+    body: JSON.stringify({ accessToken }),
+  })
+}
+
 export function getMe() {
   return apiFetch<{ user: User }>('/auth/me')
 }

@@ -1,9 +1,10 @@
 import { apiFetch } from './client'
-import type { EventStep, Message } from '@/lib/types'
+import type { EventStep, Message, MessageChannel } from '@/lib/types'
 
 interface CreateMessageInput {
   type: Message['type']
   content: string
+  channel?: MessageChannel
   steps?: EventStep[]
   scheduledAt?: string
   poll?: {

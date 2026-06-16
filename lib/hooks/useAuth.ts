@@ -21,6 +21,11 @@ export function useAuth() {
       setAuth(result)
       return result
     },
+    loginWithFacebook: async (accessToken: string) => {
+      const result = await authApi.loginWithFacebook(accessToken)
+      setAuth(result)
+      return result
+    },
     register: async (name: string, email: string, password: string) => {
       const result = await authApi.register(name, email, password)
       setAuth(result)

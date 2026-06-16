@@ -35,6 +35,14 @@ enum MessageType {
   sondage
 }
 
+enum MessageChannel {
+  whatsapp
+  sms
+  email
+  link
+  facebook
+}
+
 enum GiftStatus {
   disponible
   reserve
@@ -61,9 +69,10 @@ enum ActivityAction {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String?
   name         String
   phone        String?
+  facebookId   String?  @unique
   createdAt    DateTime @default(now())
 
   events Event[]
@@ -173,12 +182,13 @@ model SeatingTable {
 }
 
 model Message {
-  id             String        @id @default(cuid())
+  id             String          @id @default(cuid())
   type           MessageType
   content        String
+  channel        MessageChannel  @default(link)
   sentAt         DateTime?
   scheduledAt    DateTime?
-  recipientCount Int           @default(0)
+  recipientCount Int             @default(0)
   steps          EventStepType[]
 
   eventId String

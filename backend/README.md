@@ -39,6 +39,15 @@ npm run prisma:studio  # open Prisma Studio
 - Password: `password123`
 - Public invite link: `/api/invite/inv_abc123def456`
 
+### Facebook Login
+
+`POST /api/auth/facebook` exchanges a Facebook user access token (obtained client-side via the Facebook JS SDK) for an app session. Create an app at https://developers.facebook.com/apps, then set:
+
+- `FACEBOOK_APP_SECRET` — used to compute `appsecret_proof` when calling the Graph API (recommended).
+- `FACEBOOK_APP_ID` — the frontend's `NEXT_PUBLIC_FACEBOOK_APP_ID` must match this.
+
+Users created via Facebook have no password (`passwordHash` is `null`) until they set one. If a Facebook account's email matches an existing email/password account, the two are linked automatically.
+
 ## Conventions
 
 - All JSON. Authenticated routes require `Authorization: Bearer <token>`.
@@ -54,7 +63,9 @@ npm run prisma:studio  # open Prisma Studio
 |---|---|---|---|---|
 | POST | `/register` | – | `{ name, email, password }` | Create account, returns `{ token, user }` |
 | POST | `/login` | – | `{ email, password }` | Returns `{ token, user }` |
+| POST | `/facebook` | – | `{ accessToken }` | Verifies a Facebook access token (Graph API), finds or creates the matching user, returns `{ token, user }` |
 | GET | `/me` | ✅ | – | Current user |
+| PATCH | `/me` | ✅ | `{ name?, phone? }` | Update current user |
 
 ### Events — `/api/events` (all require auth)
 

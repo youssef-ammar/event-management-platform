@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { signToken } from '../lib/jwt'
+import { fetchFacebookProfile } from '../lib/facebook'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { authenticate } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
@@ -48,13 +49,46 @@ router.post(
     const { email, password } = loginSchema.parse(req.body)
 
     const user = await prisma.user.findUnique({ where: { email } })
-    if (!user) {
+    if (!user || !user.passwordHash) {
       throw new AppError('Invalid email or password', 401)
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) {
       throw new AppError('Invalid email or password', 401)
+    }
+
+    res.json({ token: signToken(user.id), user: toUserDTO(user) })
+  })
+)
+
+const facebookSchema = z.object({
+  accessToken: z.string().min(1),
+})
+
+router.post(
+  '/facebook',
+  asyncHandler(async (req, res) => {
+    const { accessToken } = facebookSchema.parse(req.body)
+    const profile = await fetchFacebookProfile(accessToken)
+
+    let user = await prisma.user.findUnique({ where: { facebookId: profile.id } })
+
+    if (!user && profile.email) {
+      const existing = await prisma.user.findUnique({ where: { email: profile.email } })
+      if (existing) {
+        user = await prisma.user.update({ where: { id: existing.id }, data: { facebookId: profile.id } })
+      }
+    }
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          name: profile.name,
+          email: profile.email ?? `fb_${profile.id}@facebook.fairepart`,
+          facebookId: profile.id,
+        },
+      })
     }
 
     res.json({ token: signToken(user.id), user: toUserDTO(user) })

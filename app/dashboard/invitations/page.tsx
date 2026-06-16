@@ -34,7 +34,7 @@ export default function InvitationsPage() {
   const [zoom, setZoom] = useState(1)
   const [sendModal, setSendModal] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [sendChannel, setSendChannel] = useState<'sms' | 'whatsapp' | 'email' | 'link'>('whatsapp')
+  const [sendChannel, setSendChannel] = useState<'sms' | 'whatsapp' | 'email' | 'link' | 'facebook'>('whatsapp')
 
   const [form, setForm] = useState({
     coupleNames: 'Sophie & Thomas',
@@ -69,7 +69,17 @@ export default function InvitationsPage() {
     if (!eventId) return
     setLoading(true)
     try {
-      await createMessage(eventId, { type: 'message', content: form.message })
+      await createMessage(eventId, { type: 'message', content: form.message, channel: sendChannel })
+
+      if (sendChannel === 'facebook' && event?.token) {
+        const inviteUrl = `${window.location.origin}/invite/${event.token}`
+        window.open(
+          `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(inviteUrl)}`,
+          '_blank',
+          'noopener,noreferrer,width=600,height=520'
+        )
+      }
+
       toast.success('Invitations envoyées avec succès !')
       setSendModal(false)
     } catch (err) {
@@ -241,17 +251,20 @@ export default function InvitationsPage() {
         <div className="space-y-5">
           <div>
             <p className="text-sm font-semibold text-gray-700 mb-3">Canal d'envoi</p>
-            <div className="grid grid-cols-4 gap-2">
-              {(['whatsapp', 'sms', 'email', 'link'] as const).map(ch => (
+            <div className="grid grid-cols-5 gap-2">
+              {(['whatsapp', 'sms', 'email', 'link', 'facebook'] as const).map(ch => (
                 <button
                   key={ch}
                   onClick={() => setSendChannel(ch)}
-                  className={cn('py-3 rounded-xl text-sm font-medium border-2 transition-all', sendChannel === ch ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-gray-200 text-gray-600 hover:border-rose-200')}
+                  className={cn('py-3 rounded-xl text-xs font-medium border-2 transition-all', sendChannel === ch ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-gray-200 text-gray-600 hover:border-rose-200')}
                 >
-                  {ch === 'whatsapp' ? '💬 WhatsApp' : ch === 'sms' ? '📱 SMS' : ch === 'email' ? '📧 Email' : '🔗 Lien'}
+                  {ch === 'whatsapp' ? '💬 WhatsApp' : ch === 'sms' ? '📱 SMS' : ch === 'email' ? '📧 Email' : ch === 'link' ? '🔗 Lien' : '📘 Facebook'}
                 </button>
               ))}
             </div>
+            {sendChannel === 'facebook' && (
+              <p className="text-xs text-gray-400 mt-2">Une fenêtre Facebook s'ouvrira pour partager le lien de votre invitation.</p>
+            )}
           </div>
           <div className="p-4 bg-gray-50 rounded-xl">
             <p className="text-sm font-medium text-gray-700 mb-2">Message d'envoi</p>

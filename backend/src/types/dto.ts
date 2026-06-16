@@ -7,6 +7,7 @@ export type RsvpStatus = 'accepted' | 'pending' | 'declined'
 export type EventStep = 'ceremonie' | 'mairie' | 'reception' | 'soiree' | 'religieux'
 export type EventTypeName = 'mariage' | 'anniversaire' | 'naissance' | 'autre'
 export type MessageTypeName = 'message' | 'sondage'
+export type MessageChannelName = 'whatsapp' | 'sms' | 'email' | 'link' | 'facebook'
 export type GiftStatusName = 'disponible' | 'reserve' | 'offert'
 
 export interface UserDTO {
@@ -61,6 +62,7 @@ export interface MessageDTO {
   id: string
   type: MessageTypeName
   content: string
+  channel: MessageChannelName
   sentAt: string | null
   recipientCount: number
   steps?: EventStep[]

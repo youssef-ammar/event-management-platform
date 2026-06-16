@@ -136,6 +136,7 @@ export function toMessageDTO(message: MessageWithPoll): MessageDTO {
     id: message.id,
     type: message.type,
     content: message.content,
+    channel: message.channel,
     sentAt: message.sentAt?.toISOString() ?? null,
     recipientCount: message.recipientCount,
     steps: message.steps.length ? message.steps : undefined,

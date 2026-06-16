@@ -2,6 +2,7 @@ export type RSVPStatus = 'accepted' | 'pending' | 'declined'
 export type EventStep = 'ceremonie' | 'mairie' | 'reception' | 'soiree' | 'religieux'
 export type EventType = 'mariage' | 'anniversaire' | 'naissance' | 'autre'
 export type MessageType = 'message' | 'sondage'
+export type MessageChannel = 'whatsapp' | 'sms' | 'email' | 'link' | 'facebook'
 export type GiftStatus = 'disponible' | 'reserve' | 'offert'
 
 export interface Guest {
@@ -35,6 +36,7 @@ export interface Message {
   id: string
   type: MessageType
   content: string
+  channel: MessageChannel
   sentAt: string
   recipientCount: number
   steps?: EventStep[]

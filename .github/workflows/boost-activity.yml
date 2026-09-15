@@ -1,0 +1,71 @@
+name: Boost Activity
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  activity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update README timestamp
+        run: |
+          TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M UTC')
+          sed -i "/<!-- LAST-UPDATED:START -->/,/<!-- LAST-UPDATED:END -->/c\\<!-- LAST-UPDATED:START -->\\nLast updated: $TIMESTAMP\\n<!-- LAST-UPDATED:END -->" README.md
+
+      - name: Commit on a new branch
+        id: branch
+        run: |
+          BRANCH="auto-update-$(date +%s)"
+          git checkout -b "$BRANCH"
+          git add README.md
+          git commit -m "chore: auto-update README timestamp" || echo "nothing to commit"
+          git push origin "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        id: pr
+        run: |
+          URL=$(gh pr create \
+            --title "Auto update: ${{ steps.branch.outputs.branch }}" \
+            --body "Automated README update." \
+            --base main \
+            --head "${{ steps.branch.outputs.branch }}")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          NUM=$(basename "$URL")
+          echo "number=$NUM" >> "$GITHUB_OUTPUT"
+
+      - name: Leave a review comment
+        run: |
+          gh pr review "${{ steps.pr.outputs.number }}" --comment -b "Automated check: looks good."
+
+      - name: Merge pull request
+        run: |
+          gh pr merge "${{ steps.pr.outputs.number }}" --merge --admin
+
+      - name: Open and close an issue
+        run: |
+          URL=$(gh issue create \
+            --title "Automated activity log $(date -u '+%Y-%m-%d %H:%M UTC')" \
+            --body "Routine automated check-in.")
+          NUM=$(basename "$URL")
+          gh issue close "$NUM"

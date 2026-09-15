@@ -1,1 +1,1 @@
-new
+Open README.md in the repo and add these two lines somewhere (e.g. near the top): <!-- LAST-UPDATED:START --> Last updated: never <!-- LAST-UPDATED:END --> The workflow will replace the text between these markers.

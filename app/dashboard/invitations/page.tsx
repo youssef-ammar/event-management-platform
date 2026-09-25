@@ -4,15 +4,16 @@ import { useEffect, useState } from 'react'
 import { DashboardTopbar } from '@/components/layout/DashboardTopbar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { Input } from '@/components/ui/Input'
+import { Input, Textarea } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Dropdown'
+import { Tabs } from '@/components/ui/Tabs'
 import { listInvitationStyles } from '@/lib/api/invitationStyles'
 import { createMessage } from '@/lib/api/messages'
 import { useEvent } from '@/lib/hooks/useEvent'
 import { ApiError } from '@/lib/api/client'
 import { formatDate } from '@/lib/utils/formatDate'
 import type { InvitationStyle } from '@/lib/types'
-import { Send, ZoomIn, ZoomOut, Eye, Save, Upload } from 'lucide-react'
+import { Send, ZoomIn, ZoomOut, Eye, Save, Upload, Check, Sparkles, Heart } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
 
@@ -35,6 +36,8 @@ export default function InvitationsPage() {
   const [sendModal, setSendModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [sendChannel, setSendChannel] = useState<'sms' | 'whatsapp' | 'email' | 'link' | 'facebook'>('whatsapp')
+  const [mobileTab, setMobileTab] = useState<'preview' | 'edit'>('preview')
+  const [celebrate, setCelebrate] = useState(false)
 
   const [form, setForm] = useState({
     coupleNames: 'Sophie & Thomas',
@@ -82,6 +85,9 @@ export default function InvitationsPage() {
 
       toast.success('Invitations envoyées avec succès !')
       setSendModal(false)
+      setMobileTab('preview')
+      setCelebrate(true)
+      setTimeout(() => setCelebrate(false), 1900)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Une erreur est survenue')
     } finally {
@@ -89,29 +95,54 @@ export default function InvitationsPage() {
     }
   }
 
+  const fontClass = selectedFont === 'playfair' ? 'font-playfair' : selectedFont === 'cormorant' ? 'font-cormorant' : 'font-inter'
+
   return (
     <>
       <DashboardTopbar title="Invitation Builder" subtitle="Personnalisez et envoyez votre faire-part" />
-      <div className="flex h-[calc(100vh-64px)] overflow-hidden">
 
-        {/* Left panel */}
-        <div className="w-80 flex-shrink-0 bg-white border-r border-gray-100 overflow-y-auto p-5 space-y-6">
+      {/* Mobile section switcher */}
+      <div className="lg:hidden sticky top-16 z-20 bg-white/90 backdrop-blur-sm border-b border-gray-100 px-4 py-3">
+        <Tabs
+          variant="pill"
+          tabs={[
+            { id: 'preview', label: 'Aperçu', icon: <Eye className="w-3.5 h-3.5" /> },
+            { id: 'edit', label: 'Personnaliser', icon: <Sparkles className="w-3.5 h-3.5" /> },
+          ]}
+          activeTab={mobileTab}
+          onChange={(id) => setMobileTab(id as 'preview' | 'edit')}
+        />
+      </div>
+
+      <div className="lg:flex lg:h-[calc(100vh-64px)] lg:overflow-hidden">
+
+        {/* Left panel: customization */}
+        <div className={cn(
+          'w-full lg:w-80 lg:flex-shrink-0 bg-white lg:border-r border-gray-100 lg:overflow-y-auto p-5 pb-28 lg:pb-5 space-y-6',
+          mobileTab === 'edit' ? 'block' : 'hidden lg:block',
+        )}>
           {/* Style picker */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Style de carte</h3>
             <div className="grid grid-cols-3 gap-2">
-              {styles.map(style => (
+              {styles.map((style, i) => (
                 <button
                   key={style.id}
                   onClick={() => { setSelectedStyle(style); setSelectedColor(style.primaryColor) }}
-                  className={cn('aspect-[3/4] rounded-xl border-2 overflow-hidden transition-all duration-200 relative',
-                    selectedStyle?.id === style.id ? 'border-rose-500 ring-2 ring-rose-200' : 'border-gray-200 hover:border-rose-300'
+                  style={{ animationDelay: `${i * 40}ms` }}
+                  className={cn('animate-fade-in aspect-[3/4] rounded-xl border-2 overflow-hidden transition-all duration-200 relative group',
+                    selectedStyle?.id === style.id ? 'border-rose-500 ring-2 ring-rose-200 scale-[1.03]' : 'border-gray-200 hover:border-rose-300 hover:-translate-y-0.5'
                   )}
                   aria-label={`Style ${style.name}`}
                 >
-                  <div className="w-full h-full flex items-center justify-center text-2xl" style={{ background: `linear-gradient(135deg, ${style.primaryColor}20, white)` }}>
+                  <div className="w-full h-full flex items-center justify-center text-2xl transition-transform duration-300 group-hover:scale-110" style={{ background: `linear-gradient(135deg, ${style.primaryColor}20, white)` }}>
                     💌
                   </div>
+                  {selectedStyle?.id === style.id && (
+                    <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center animate-scale-in">
+                      <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                    </span>
+                  )}
                   <p className="absolute bottom-1 inset-x-1 text-center text-[9px] font-medium text-gray-600 bg-white/80 rounded py-0.5">{style.name}</p>
                 </button>
               ))}
@@ -131,8 +162,8 @@ export default function InvitationsPage() {
                 <button
                   key={color}
                   onClick={() => setSelectedColor(color)}
-                  className={cn('w-8 h-8 rounded-full border-2 transition-all duration-200', selectedColor === color ? 'border-gray-900 scale-110' : 'border-white shadow-sm hover:scale-105')}
-                  style={{ backgroundColor: color }}
+                  className={cn('w-8 h-8 rounded-full border-2 transition-all duration-200', selectedColor === color ? 'border-gray-900 scale-125 shadow-lg' : 'border-white shadow-sm hover:scale-110')}
+                  style={{ backgroundColor: color, boxShadow: selectedColor === color ? `0 0 0 3px white, 0 0 0 5px ${color}66` : undefined }}
                   aria-label={`Couleur ${color}`}
                 />
               ))}
@@ -148,13 +179,14 @@ export default function InvitationsPage() {
               <Input label="Lieu" value={form.venue} onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} />
               <Input label="Heure" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
               <Input label="Dress code" value={form.dressCode} onChange={e => setForm(f => ({ ...f, dressCode: e.target.value }))} />
+              <Textarea label="Message" rows={3} value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} maxLength={200} characterCount={form.message.length} />
             </div>
           </div>
 
           {/* Import */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Importer un design</h3>
-            <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-rose-300 transition-colors cursor-pointer">
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-rose-300 hover:bg-rose-50/30 transition-colors cursor-pointer">
               <Upload className="w-5 h-5 text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-500">Glissez un fichier ou cliquez</p>
               <p className="text-xs text-gray-400 mt-1">PDF, PNG, JPG acceptés</p>
@@ -163,15 +195,17 @@ export default function InvitationsPage() {
         </div>
 
         {/* Right panel: Preview */}
-        <div className="flex-1 bg-gray-50 flex flex-col overflow-hidden">
+        <div className={cn(
+          'relative flex-1 gradient-hero flex flex-col overflow-hidden',
+          mobileTab === 'preview' ? 'block' : 'hidden lg:flex',
+        )}>
           {/* Preview toolbar */}
-          <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setGuestView(!guestView)} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors', guestView ? 'bg-rose-500 text-white border-rose-500' : 'text-gray-600 border-gray-200 hover:border-rose-300')}>
-                <Eye className="w-4 h-4" /> {guestView ? 'Vue invité' : 'Vue organisateur'}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
+          <div className="relative z-10 bg-white/80 backdrop-blur-sm border-b border-gray-100 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
+            <button onClick={() => setGuestView(!guestView)} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors', guestView ? 'bg-rose-500 text-white border-rose-500' : 'text-gray-600 border-gray-200 hover:border-rose-300')}>
+              <Eye className="w-4 h-4" /> <span className="hidden sm:inline">{guestView ? 'Vue invité' : 'Vue organisateur'}</span>
+            </button>
+
+            <div className="hidden sm:flex items-center gap-2">
               <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="p-1.5 rounded-lg border border-gray-200 hover:border-rose-300 text-gray-600 transition-colors">
                 <ZoomOut className="w-4 h-4" />
               </button>
@@ -180,7 +214,8 @@ export default function InvitationsPage() {
                 <ZoomIn className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="hidden lg:flex items-center gap-2">
               <Button size="sm" variant="outlined" leftIcon={<Save className="w-4 h-4" />} onClick={() => toast.success('Brouillon sauvegardé')}>
                 Sauvegarder
               </Button>
@@ -190,51 +225,85 @@ export default function InvitationsPage() {
             </div>
           </div>
 
+          {/* Decorative floating blobs */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute -top-10 -left-10 w-64 h-64 rounded-full blur-3xl opacity-30 animate-float" style={{ background: selectedColor, animationDelay: '0s' }} />
+            <div className="absolute bottom-0 -right-10 w-72 h-72 rounded-full blur-3xl opacity-20 animate-float" style={{ background: '#D4AF7A', animationDelay: '1.5s' }} />
+            <Sparkles className="hidden sm:block absolute top-24 left-[15%] w-5 h-5 text-champagne-400 opacity-60 animate-float" style={{ animationDelay: '0.6s' }} />
+            <Heart className="hidden sm:block absolute bottom-32 right-[18%] w-5 h-5 opacity-50 animate-float" style={{ color: selectedColor, animationDelay: '2s' }} />
+          </div>
+
           {/* Preview area */}
-          <div className="flex-1 overflow-auto flex items-center justify-center p-8">
-            <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s' }}>
+          <div className="relative z-10 flex-1 overflow-auto flex items-center justify-center p-6 sm:p-8">
+            <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s' }} className="animate-scale-in">
               {/* Phone frame */}
-              <div className="relative w-72 h-[580px]">
-                <div className="absolute inset-0 bg-gray-900 rounded-[3rem] shadow-2xl border-4 border-gray-800">
-                  <div className="absolute inset-2 rounded-[2.5rem] overflow-hidden" style={{ background: `linear-gradient(160deg, ${selectedColor}15 0%, white 50%, ${selectedColor}08 100%)` }}>
+              <div className="relative w-72 h-[580px] animate-float" style={{ animationDuration: '7s' }}>
+                <div
+                  className="absolute inset-0 bg-gray-900 rounded-[3rem] border-4 border-gray-800 transition-shadow duration-500"
+                  style={{ boxShadow: `0 25px 60px -12px ${selectedColor}55, 0 10px 24px rgba(0,0,0,0.25)` }}
+                >
+                  <div className="absolute inset-2 rounded-[2.5rem] overflow-hidden transition-all duration-500" style={{ background: `linear-gradient(160deg, ${selectedColor}15 0%, white 50%, ${selectedColor}08 100%)` }}>
                     {/* Dynamic island */}
                     <div className="absolute top-3 left-1/2 -translate-x-1/2 w-24 h-5 bg-gray-900 rounded-full z-10" />
 
                     {/* Invitation card content */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                      <div className="absolute top-0 inset-x-0 h-40 opacity-20" style={{ background: `linear-gradient(to bottom, ${selectedColor}, transparent)` }} />
+                      <div className="absolute top-0 inset-x-0 h-40 opacity-20 transition-colors duration-500" style={{ background: `linear-gradient(to bottom, ${selectedColor}, transparent)` }} />
 
-                      <p className="text-xs font-medium uppercase tracking-widest mb-3 mt-10" style={{ color: selectedColor }}>
+                      <p className="text-xs font-medium uppercase tracking-widest mb-3 mt-10 transition-colors duration-500" style={{ color: selectedColor }}>
                         {guestView ? 'Vous êtes invité(e) !' : 'Aperçu invitation'}
                       </p>
 
-                      <h2 className={cn('text-3xl font-bold text-gray-900 mb-1', selectedFont === 'playfair' ? 'font-playfair' : selectedFont === 'cormorant' ? 'font-cormorant' : 'font-inter')}>
+                      <h2 className={cn('text-3xl font-bold text-gray-900 mb-1 transition-all duration-300', fontClass)}>
                         {form.coupleNames.split('&')[0]?.trim()}
                       </h2>
                       <p className="text-lg text-gray-500 mb-1">&</p>
-                      <h2 className={cn('text-3xl font-bold text-gray-900 mb-4', selectedFont === 'playfair' ? 'font-playfair' : selectedFont === 'cormorant' ? 'font-cormorant' : 'font-inter')}>
+                      <h2 className={cn('text-3xl font-bold text-gray-900 mb-4 transition-all duration-300', fontClass)}>
                         {form.coupleNames.split('&')[1]?.trim()}
                       </h2>
 
-                      <div className="w-12 h-0.5 mx-auto mb-4" style={{ backgroundColor: selectedColor }} />
+                      <div className="w-12 h-0.5 mx-auto mb-4 transition-colors duration-500" style={{ backgroundColor: selectedColor }} />
 
                       <p className="text-sm font-semibold text-gray-800 mb-1">{form.date}</p>
                       <p className="text-xs text-gray-500 mb-1">{form.time}</p>
                       <p className="text-xs text-gray-500 mb-4">{form.venue}</p>
 
-                      <p className="text-xs text-gray-400 leading-relaxed mb-5 italic">"{form.message}"</p>
+                      <p className="text-xs text-gray-400 leading-relaxed mb-5 italic">&ldquo;{form.message}&rdquo;</p>
 
                       <div className="flex gap-2">
-                        <button className="px-4 py-2 text-xs font-semibold rounded-full text-white" style={{ backgroundColor: selectedColor }}>
-                          ✓ J'y serai !
+                        <button className="px-4 py-2 text-xs font-semibold rounded-full text-white transition-all duration-300 hover:scale-105" style={{ backgroundColor: selectedColor, boxShadow: `0 4px 14px ${selectedColor}55` }}>
+                          ✓ J&apos;y serai !
                         </button>
-                        <button className="px-4 py-2 text-xs font-semibold rounded-full border" style={{ borderColor: selectedColor, color: selectedColor }}>
+                        <button className="px-4 py-2 text-xs font-semibold rounded-full border transition-all duration-300 hover:scale-105" style={{ borderColor: selectedColor, color: selectedColor }}>
                           Je ne peux pas
                         </button>
                       </div>
 
                       <p className="text-xs text-gray-400 mt-4">👗 {form.dressCode}</p>
                     </div>
+
+                    {/* Send celebration */}
+                    {celebrate && (
+                      <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-sm animate-fade-in overflow-hidden">
+                        {Array.from({ length: 16 }).map((_, i) => (
+                          <span
+                            key={i}
+                            className="absolute top-1/3 w-2 h-2 rounded-sm animate-confetti"
+                            style={{
+                              left: `${8 + (i * 6) % 84}%`,
+                              backgroundColor: COLOR_SWATCHES[i % COLOR_SWATCHES.length],
+                              animationDelay: `${(i % 6) * 80}ms`,
+                            }}
+                          />
+                        ))}
+                        <div className="relative w-16 h-16 rounded-full flex items-center justify-center animate-scale-in" style={{ backgroundColor: selectedColor }}>
+                          <svg viewBox="0 0 24 24" className="w-8 h-8">
+                            <path d="M4 12l5 5L20 6" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                              strokeDasharray="100" className="animate-check-draw" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-20 h-1 bg-gray-600 rounded-full" />
@@ -244,30 +313,40 @@ export default function InvitationsPage() {
         </div>
       </div>
 
+      {/* Mobile sticky action bar */}
+      <div className="lg:hidden fixed bottom-16 inset-x-0 z-20 bg-white/95 backdrop-blur-sm border-t border-gray-100 px-4 py-3 flex items-center gap-2">
+        <Button variant="outlined" size="sm" className="flex-1" leftIcon={<Save className="w-4 h-4" />} onClick={() => toast.success('Brouillon sauvegardé')}>
+          Sauvegarder
+        </Button>
+        <Button size="sm" className="flex-1" leftIcon={<Send className="w-4 h-4" />} onClick={() => setSendModal(true)}>
+          Envoyer
+        </Button>
+      </div>
+
       {/* Send Modal */}
       <Modal open={sendModal} onClose={() => setSendModal(false)} title="Envoyer les invitations" size="md" footer={
         <><Button variant="ghost" onClick={() => setSendModal(false)}>Annuler</Button><Button loading={loading} onClick={handleSend} leftIcon={<Send className="w-4 h-4" />}>Envoyer maintenant</Button></>
       }>
         <div className="space-y-5">
           <div>
-            <p className="text-sm font-semibold text-gray-700 mb-3">Canal d'envoi</p>
-            <div className="grid grid-cols-5 gap-2">
+            <p className="text-sm font-semibold text-gray-700 mb-3">Canal d&apos;envoi</p>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {(['whatsapp', 'sms', 'email', 'link', 'facebook'] as const).map(ch => (
                 <button
                   key={ch}
                   onClick={() => setSendChannel(ch)}
-                  className={cn('py-3 rounded-xl text-xs font-medium border-2 transition-all', sendChannel === ch ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-gray-200 text-gray-600 hover:border-rose-200')}
+                  className={cn('py-3 rounded-xl text-xs font-medium border-2 transition-all', sendChannel === ch ? 'border-rose-500 bg-rose-50 text-rose-700 scale-105' : 'border-gray-200 text-gray-600 hover:border-rose-200')}
                 >
                   {ch === 'whatsapp' ? '💬 WhatsApp' : ch === 'sms' ? '📱 SMS' : ch === 'email' ? '📧 Email' : ch === 'link' ? '🔗 Lien' : '📘 Facebook'}
                 </button>
               ))}
             </div>
             {sendChannel === 'facebook' && (
-              <p className="text-xs text-gray-400 mt-2">Une fenêtre Facebook s'ouvrira pour partager le lien de votre invitation.</p>
+              <p className="text-xs text-gray-400 mt-2">Une fenêtre Facebook s&apos;ouvrira pour partager le lien de votre invitation.</p>
             )}
           </div>
           <div className="p-4 bg-gray-50 rounded-xl">
-            <p className="text-sm font-medium text-gray-700 mb-2">Message d'envoi</p>
+            <p className="text-sm font-medium text-gray-700 mb-2">Message d&apos;envoi</p>
             <p className="text-sm text-gray-500">{form.coupleNames} vous invitent à leur événement le {form.date} ! Consultez votre invitation personnalisée ici : [lien]</p>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-600 bg-blue-50 p-3 rounded-xl">

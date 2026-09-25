@@ -85,6 +85,10 @@ const config: Config = {
           '0%': { strokeDashoffset: '100' },
           '100%': { strokeDashoffset: '0' },
         },
+        confetti: {
+          '0%': { transform: 'translateY(0) rotate(0deg)', opacity: '1' },
+          '100%': { transform: 'translateY(140px) rotate(540deg)', opacity: '0' },
+        },
       },
       backdropBlur: { xs: '2px' },
       boxShadow: {

@@ -25,6 +25,55 @@ const FONT_OPTIONS = [
 
 const COLOR_SWATCHES = ['#C9748F', '#D4AF7A', '#7C3AED', '#2563EB', '#059669', '#DC2626', '#1A1A2E', '#6B7280']
 
+const FONT_FAMILY_TO_KEY: Record<string, string> = {
+  'Playfair Display': 'playfair',
+  'Cormorant Garamond': 'cormorant',
+  'Inter': 'inter',
+}
+
+function fontClassFromKey(key: string) {
+  return key === 'playfair' ? 'font-playfair' : key === 'cormorant' ? 'font-cormorant' : 'font-inter'
+}
+
+const PATTERN_LABELS: Record<string, string> = {
+  floral: 'Floral',
+  geometric: 'Géométrique',
+  botanical: 'Botanique',
+  minimal: 'Épuré',
+  soft: 'Doux',
+  rustic: 'Champêtre',
+}
+
+// No real template thumbnails ship with the app, so each style's card and
+// live preview render a lightweight CSS pattern instead of a broken image.
+function patternBackground(pattern: string | undefined, color: string): React.CSSProperties {
+  switch (pattern) {
+    case 'floral':
+      return {
+        backgroundImage: `radial-gradient(circle at 18% 28%, ${color}40 0 3px, transparent 4px), radial-gradient(circle at 58% 12%, ${color}30 0 2.5px, transparent 3.5px), radial-gradient(circle at 82% 52%, ${color}40 0 3px, transparent 4px), radial-gradient(circle at 32% 78%, ${color}30 0 2.5px, transparent 3.5px), radial-gradient(circle at 78% 86%, ${color}40 0 3px, transparent 4px), radial-gradient(circle at 8% 60%, ${color}26 0 2px, transparent 3px)`,
+      }
+    case 'geometric':
+      return {
+        backgroundImage: `repeating-linear-gradient(45deg, ${color}2e 0 2px, transparent 2px 14px)`,
+      }
+    case 'botanical':
+      return {
+        backgroundImage: `radial-gradient(ellipse 65% 45% at 8% -5%, ${color}38 0%, transparent 60%), radial-gradient(ellipse 55% 40% at 105% 105%, ${color}30 0%, transparent 60%)`,
+      }
+    case 'soft':
+      return {
+        backgroundImage: `radial-gradient(circle at 50% 15%, ${color}2c 0%, transparent 55%)`,
+      }
+    case 'rustic':
+      return {
+        backgroundImage: `repeating-linear-gradient(90deg, ${color}1c 0 1px, transparent 1px 7px), repeating-linear-gradient(0deg, ${color}1c 0 1px, transparent 1px 7px)`,
+      }
+    case 'minimal':
+    default:
+      return {}
+  }
+}
+
 export default function InvitationsPage() {
   const { event, eventId } = useEvent()
   const [styles, setStyles] = useState<InvitationStyle[]>([])
@@ -123,35 +172,44 @@ export default function InvitationsPage() {
         )}>
           {/* Style picker */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Style de carte</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">Style de carte</h3>
+            <p className="text-xs text-gray-400 mb-3">Choisissez un modèle, sa police et son motif s&apos;appliquent automatiquement — libre à vous d&apos;ajuster ensuite.</p>
             <div className="grid grid-cols-3 gap-2">
-              {styles.map((style, i) => (
-                <button
-                  key={style.id}
-                  onClick={() => { setSelectedStyle(style); setSelectedColor(style.primaryColor) }}
-                  style={{ animationDelay: `${i * 40}ms` }}
-                  className={cn('animate-fade-in aspect-[3/4] rounded-xl border-2 overflow-hidden transition-all duration-200 relative group',
-                    selectedStyle?.id === style.id ? 'border-rose-500 ring-2 ring-rose-200 scale-[1.03]' : 'border-gray-200 hover:border-rose-300 hover:-translate-y-0.5'
-                  )}
-                  aria-label={`Style ${style.name}`}
-                >
-                  <div className="w-full h-full flex items-center justify-center text-2xl transition-transform duration-300 group-hover:scale-110" style={{ background: `linear-gradient(135deg, ${style.primaryColor}20, white)` }}>
-                    💌
-                  </div>
-                  {selectedStyle?.id === style.id && (
-                    <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center animate-scale-in">
-                      <Check className="w-2.5 h-2.5" strokeWidth={3} />
-                    </span>
-                  )}
-                  <p className="absolute bottom-1 inset-x-1 text-center text-[9px] font-medium text-gray-600 bg-white/80 rounded py-0.5">{style.name}</p>
-                </button>
-              ))}
+              {styles.map((style, i) => {
+                const styleFontKey = FONT_FAMILY_TO_KEY[style.fontFamily] ?? 'inter'
+                return (
+                  <button
+                    key={style.id}
+                    onClick={() => { setSelectedStyle(style); setSelectedColor(style.primaryColor); setSelectedFont(styleFontKey) }}
+                    style={{ animationDelay: `${i * 40}ms` }}
+                    className={cn('animate-fade-in aspect-[3/4] rounded-xl border-2 overflow-hidden transition-all duration-200 relative group',
+                      selectedStyle?.id === style.id ? 'border-rose-500 ring-2 ring-rose-200 scale-[1.03]' : 'border-gray-200 hover:border-rose-300 hover:-translate-y-0.5'
+                    )}
+                    aria-label={`Style ${style.name} — ${style.fontFamily}, motif ${PATTERN_LABELS[style.backgroundPattern ?? ''] ?? style.backgroundPattern}`}
+                    title={`${style.name} · ${style.fontFamily}`}
+                  >
+                    <div
+                      className="w-full h-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                      style={{ background: `linear-gradient(135deg, ${style.primaryColor}1a, white)`, ...patternBackground(style.backgroundPattern, style.primaryColor) }}
+                    >
+                      <span className={cn('text-xl font-semibold', fontClassFromKey(styleFontKey))} style={{ color: style.primaryColor }}>Aa</span>
+                    </div>
+                    {selectedStyle?.id === style.id && (
+                      <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center animate-scale-in">
+                        <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                      </span>
+                    )}
+                    <p className="absolute bottom-1 inset-x-1 text-center text-[9px] font-medium text-gray-600 bg-white/80 rounded py-0.5 truncate px-1">{style.name}</p>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
           {/* Font picker */}
           <div>
             <Select label="Police" value={selectedFont} onChange={setSelectedFont} options={FONT_OPTIONS} />
+            <p className="text-xs text-gray-400 mt-1.5">Se réajuste si vous changez de modèle ci-dessus.</p>
           </div>
 
           {/* Color picker */}
@@ -201,9 +259,17 @@ export default function InvitationsPage() {
         )}>
           {/* Preview toolbar */}
           <div className="relative z-10 bg-white/80 backdrop-blur-sm border-b border-gray-100 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
-            <button onClick={() => setGuestView(!guestView)} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors', guestView ? 'bg-rose-500 text-white border-rose-500' : 'text-gray-600 border-gray-200 hover:border-rose-300')}>
-              <Eye className="w-4 h-4" /> <span className="hidden sm:inline">{guestView ? 'Vue invité' : 'Vue organisateur'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setGuestView(!guestView)} className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors', guestView ? 'bg-rose-500 text-white border-rose-500' : 'text-gray-600 border-gray-200 hover:border-rose-300')}>
+                <Eye className="w-4 h-4" /> <span className="hidden sm:inline">{guestView ? 'Vue invité' : 'Vue organisateur'}</span>
+              </button>
+              {selectedStyle && (
+                <span className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-50 border border-gray-200 text-gray-500">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: selectedColor }} />
+                  {selectedStyle.name}
+                </span>
+              )}
+            </div>
 
             <div className="hidden sm:flex items-center gap-2">
               <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="p-1.5 rounded-lg border border-gray-200 hover:border-rose-300 text-gray-600 transition-colors">
@@ -243,6 +309,9 @@ export default function InvitationsPage() {
                   style={{ boxShadow: `0 25px 60px -12px ${selectedColor}55, 0 10px 24px rgba(0,0,0,0.25)` }}
                 >
                   <div className="absolute inset-2 rounded-[2.5rem] overflow-hidden transition-all duration-500" style={{ background: `linear-gradient(160deg, ${selectedColor}15 0%, white 50%, ${selectedColor}08 100%)` }}>
+                    {/* Template pattern */}
+                    <div className="absolute inset-0 transition-opacity duration-500" style={patternBackground(selectedStyle?.backgroundPattern, selectedColor)} />
+
                     {/* Dynamic island */}
                     <div className="absolute top-3 left-1/2 -translate-x-1/2 w-24 h-5 bg-gray-900 rounded-full z-10" />
 

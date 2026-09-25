@@ -189,10 +189,20 @@ export default function InvitationsPage() {
                     title={`${style.name} · ${style.fontFamily}`}
                   >
                     <div
-                      className="w-full h-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                      className="w-full h-full relative transition-transform duration-300 group-hover:scale-110"
                       style={{ background: `linear-gradient(135deg, ${style.primaryColor}1a, white)`, ...patternBackground(style.backgroundPattern, style.primaryColor) }}
                     >
-                      <span className={cn('text-xl font-semibold', fontClassFromKey(styleFontKey))} style={{ color: style.primaryColor }}>Aa</span>
+                      {style.thumbnailUrl && (
+                        <img
+                          src={style.thumbnailUrl}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => { e.currentTarget.style.display = 'none' }}
+                        />
+                      )}
+                      {!style.thumbnailUrl && (
+                        <span className={cn('absolute inset-0 flex items-center justify-center text-xl font-semibold', fontClassFromKey(styleFontKey))} style={{ color: style.primaryColor }}>Aa</span>
+                      )}
                     </div>
                     {selectedStyle?.id === style.id && (
                       <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center animate-scale-in">
